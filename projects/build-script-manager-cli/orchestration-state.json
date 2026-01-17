@@ -1,0 +1,64 @@
+{
+  "title": "Build Script Manager CLI",
+  "slug": "build-script-manager-cli",
+  "problem_description": "Create a CLI using Ink for the interface that accepts a file or a directory. If the file doesn't exist yet it should open VIM for editing and write a shebang on the first line. When the user closes VIM it should make the file executable. Then sudo copy it to /usr/local/bin. Then upload the file to a GitHub repository that should be based on configuration. The goal is to make a manager so it's easy to package up scripts, install from NPM, and deploy all CLI tools to your computer.",
+  "created_at": "2026-01-16T00:00:00Z",
+  "stages_completed": ["stage-1", "stage-2", "stage-3"],
+  "pfb_path": "./projects/build-script-manager-cli/pfb.md",
+  "pfb_completed": true,
+  "prd_path": "./projects/build-script-manager-cli/prd.md",
+  "prd_completed": true,
+  "phases": [
+    {
+      "number": 1,
+      "title": "Foundation",
+      "work_items": [
+        {"number": "1.1", "title": "Project Initialization"},
+        {"number": "1.2", "title": "CLI Entry Point and Argument Parsing"},
+        {"number": "1.3", "title": "Configuration Management"},
+        {"number": "1.4", "title": "Basic Ink UI Shell"}
+      ]
+    },
+    {
+      "number": 2,
+      "title": "Editor Integration",
+      "work_items": [
+        {"number": "2.1", "title": "File Existence Detection"},
+        {"number": "2.2", "title": "Shebang Detection and Generation"},
+        {"number": "2.3", "title": "VIM Spawning and Process Management"},
+        {"number": "2.4", "title": "Post-Edit File Validation"}
+      ]
+    },
+    {
+      "number": 3,
+      "title": "System Integration",
+      "work_items": [
+        {"number": "3.1", "title": "Chmod Execution Permission"},
+        {"number": "3.2", "title": "Script Name Extraction"},
+        {"number": "3.3", "title": "Sudo Copy to /usr/local/bin"},
+        {"number": "3.4", "title": "Installation Verification"}
+      ]
+    },
+    {
+      "number": 4,
+      "title": "GitHub Sync",
+      "work_items": [
+        {"number": "4.1", "title": "GitHub Authentication"},
+        {"number": "4.2", "title": "Repository Configuration"},
+        {"number": "4.3", "title": "File Upload/Update"},
+        {"number": "4.4", "title": "Sync Status Reporting"}
+      ]
+    },
+    {
+      "number": 5,
+      "title": "Polish & Distribution",
+      "work_items": [
+        {"number": "5.1", "title": "Enhanced Ink UI"},
+        {"number": "5.2", "title": "Error Handling and Help System"},
+        {"number": "5.3", "title": "NPM Package Configuration"},
+        {"number": "5.4", "title": "Documentation and Examples"},
+        {"number": "5.5", "title": "Test Suite and CI/CD"}
+      ]
+    }
+  ]
+}

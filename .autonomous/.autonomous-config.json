@@ -1,0 +1,49 @@
+{
+  "version": "0.1.0",
+  "llms": {
+    "claude": {
+      "enabled": false,
+      "maxConcurrentIssues": 3,
+      "cliPath": "claude",
+      "hooksEnabled": true
+    },
+    "gemini": {
+      "enabled": false,
+      "maxConcurrentIssues": 3,
+      "hooksEnabled": false
+    },
+    "codex": {
+      "enabled": false,
+      "maxConcurrentIssues": 3,
+      "hooksEnabled": false
+    }
+  },
+  "github": {
+    "owner": "",
+    "repo": "",
+    "labels": [
+      "autonomous-ready"
+    ],
+    "excludeLabels": [
+      "wontfix",
+      "duplicate"
+    ]
+  },
+  "worktree": {
+    "baseDir": "..",
+    "namingPattern": "{projectName}-issue-{number}",
+    "branchPrefix": "feature/issue-",
+    "cleanup": {
+      "onComplete": false,
+      "onError": false
+    }
+  },
+  "requirements": {
+    "testingRequired": true,
+    "ciMustPass": true,
+    "prTemplateRequired": false
+  },
+  "logging": {
+    "level": "info"
+  }
+}
