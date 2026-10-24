@@ -107,12 +107,24 @@ def publish_unique(temp, desired):
             continue
     raise RuntimeError("Too many existing files with the same name.")
 
-def export(path, raw):
+def export(path, raw, replace_output=None):
     path=pathlib.Path(path).resolve(strict=True)
+    already_archived=path.parent.name == "chroma-originals"
+    export_dir=path.parent.parent if already_archived else path.parent
+    target=None
+    if replace_output is not None:
+        requested=pathlib.Path(replace_output).absolute()
+        target=requested.parent.resolve(strict=True)/requested.name
+        if target.suffix.lower() != ".webm" or target.parent != export_dir:
+            raise ValueError("Replacement must be a WebM beside the original export.")
+        if target == path or (target.exists() and os.path.samefile(target,path)):
+            raise ValueError("The original video cannot be a replacement output.")
+        if target.is_symlink():
+            raise ValueError("Replacement output cannot be a symbolic link.")
     info=probe(path)
     s=settings(raw)
     before=path.stat()
-    temp=path.with_name(f".chroma-{uuid.uuid4().hex}.webm")
+    temp=export_dir/f".chroma-{uuid.uuid4().hex}.webm"
     try:
         args=["-i",str(path),"-map",f'0:{info["stream"]}',"-vf",filters(s)+",pad=ceil(iw/2)*2:ceil(ih/2)*2,format=yuva420p","-c:v","libvpx-vp9","-pix_fmt","yuva420p","-auto-alt-ref","0","-crf",str(int(s["crf"])),"-b:v","0","-deadline","good","-cpu-used","3","-row-mt","1"]
         args += ["-map","0:a?","-c:a","libopus"] if s["audio"] else ["-an"]
@@ -127,15 +139,22 @@ def export(path, raw):
         current=path.stat()
         if (current.st_ino,current.st_size,current.st_mtime_ns)!=(before.st_ino,before.st_size,before.st_mtime_ns):
             raise RuntimeError("Source changed during export; original preserved.")
-        output=publish_unique(temp,path.with_suffix(".webm"))
+        if target is None:
+            output=publish_unique(temp,export_dir/path.with_suffix(".webm").name)
+        else:
+            # The previous verified output remains intact until this commit point.
+            os.replace(temp,target)
+            output=target
+        if already_archived:
+            return {"output":str(output),"archive":str(path),"source":str(path)}
         archive_dir=path.parent/"chroma-originals"
         try:
             archive_dir.mkdir(exist_ok=True)
             archived=publish_unique(path,archive_dir/path.name)
             path.unlink()
         except OSError as e:
-            return {"output":str(output),"warning":f"WebM saved, but original was not moved: {e}"}
-        return {"output":str(output),"archive":str(archived)}
+            return {"output":str(output),"source":str(path),"warning":f"WebM saved, but original was not moved: {e}"}
+        return {"output":str(output),"archive":str(archived),"source":str(archived)}
     finally:
         temp.unlink(missing_ok=True)
 
@@ -146,11 +165,12 @@ def main():
     p.add_argument("--settings",default="{}")
     p.add_argument("--time",type=float,default=0)
     p.add_argument("--directory")
+    p.add_argument("--replace-output",help="Replace this editing session\'s previous WebM after verification.")
     a=p.parse_args()
     raw=json.loads(a.settings)
     if a.action=="info": result=detect(a.path)
     elif a.action=="preview": result=preview(a.path,raw,a.time,a.directory)
-    elif a.action=="export": result=export(a.path,raw)
+    elif a.action=="export": result=export(a.path,raw,a.replace_output)
     else: result={"filter":filters(raw)}
     print(json.dumps(result),flush=True)
 

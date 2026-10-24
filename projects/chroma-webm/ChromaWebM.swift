@@ -63,6 +63,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var backing=NSSegmentedControl(labels:["Checkerboard","Black","White","Pink"],trackingMode:.selectOne,target:nil,action:nil)
     var spinner=NSProgressIndicator()
     var queue=[String](), current:String?, duration=0.0
+    var exportOutput:String?
+    var nextButton=NSButton(title:"Skip Video",target:nil,action:nil)
     var generation=0, pending:DispatchWorkItem?
     var busy=false, closing=false
     var exportProcess:Process?
@@ -126,8 +128,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         titleLabel.font = .boldSystemFont(ofSize:20); titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
         let chooseButton=NSButton(title:"Choose Videos…",target:self,action:#selector(choose(_:)))
-        let skipButton=NSButton(title:"Skip Video",target:self,action:#selector(skip(_:)))
-        let header=stack([titleLabel,skipButton,chooseButton]); titleLabel.widthAnchor.constraint(greaterThanOrEqualToConstant:600).isActive=true
+        nextButton.target=self; nextButton.action=#selector(skip(_:))
+        let header=stack([titleLabel,nextButton,chooseButton]); titleLabel.widthAnchor.constraint(greaterThanOrEqualToConstant:600).isActive=true
         root.addArrangedSubview(header)
         let sourceTitle=label("Original · click the background to sample",true), keyedTitle=label("Transparent result",true)
         let left=stack([sourceTitle,sourceView],true), right=stack([keyedTitle,resultView],true)
@@ -173,7 +175,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         audio.toolTip="Audio is removed by default. Enable to encode existing audio as Opus."
         root.addArrangedSubview(audio)
-        let note=NSTextField(wrappingLabelWithString:"Exports beside the video as transparent VP9 WebM (CRF 28). After verification, the original moves to ./chroma-originals. Existing files receive a numbered name.")
+        let note=NSTextField(wrappingLabelWithString:"First export saves VP9 WebM (CRF 28) and archives the original in ./chroma-originals. Export Again replaces the same WebM and keeps the archived original.")
         note.font = .systemFont(ofSize:12); note.textColor = .secondaryLabelColor
         root.addArrangedSubview(note); note.widthAnchor.constraint(equalTo:root.widthAnchor).isActive=true
         status.font = .systemFont(ofSize:12); status.maximumNumberOfLines=3
@@ -198,10 +200,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.message="Choose videos with a solid-color background"
         if panel.runModal() == .OK { queue += panel.urls.map(\.path); current=nil; next() }
     }
-    @objc func skip(_ sender:Any?) { guard !busy else { return }; current=nil; if !queue.isEmpty { next() } else { choose(nil) } }
+    @objc func skip(_ sender:Any?) { guard !busy else { return }; if !queue.isEmpty { next() } else { choose(nil) } }
     func next() {
         guard !queue.isEmpty else { return }
-        current=queue.removeFirst(); titleLabel.stringValue=URL(fileURLWithPath:current!).lastPathComponent
+        current=queue.removeFirst(); exportOutput=nil; exportButton.title="Export WebM"; nextButton.title="Skip Video"
+        titleLabel.stringValue=URL(fileURLWithPath:current!).lastPathComponent
+        titleLabel.toolTip=current; window.representedURL=URL(fileURLWithPath:current!)
         seek.doubleValue=0; generation += 1; sourceView.image=nil; sourceView.sampleBitmap=nil; resultView.image=nil
         detectAgain(nil)
     }
@@ -275,20 +279,25 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func exportVideo(_ sender:Any?) {
         guard let path=current,!busy else { return }
         busy=true; generation += 1; pending?.cancel()
-        let s=settings
+        let s=settings, extras=exportOutput.map { ["--replace-output",$0] } ?? []
         exportButton.isEnabled=false; cancelButton.isHidden=false; spinner.startAnimation(nil)
-        status.stringValue="Encoding and verifying transparent WebM… Original stays in place until verification succeeds."
+        status.stringValue="Encoding and verifying transparent WebM… Original and previous output stay intact until verification succeeds."
         setControls(false)
         DispatchQueue.global(qos:.userInitiated).async {
             do {
-                let result=try self.call("export",path,s,processCallback:{ process in DispatchQueue.main.async { self.exportProcess=process; if self.closing { process.terminate() } } })
+                let result=try self.call("export",path,s,extras,processCallback:{ process in DispatchQueue.main.async { self.exportProcess=process; if self.closing { process.terminate() } } })
                 DispatchQueue.main.async {
                     self.endExport()
+                    self.current=result["source"] as? String ?? result["archive"] as? String ?? path
+                    self.exportOutput=result["output"] as? String
+                    let sourceURL=URL(fileURLWithPath:self.current!)
+                    self.titleLabel.stringValue=sourceURL.lastPathComponent+(sourceURL.deletingLastPathComponent().lastPathComponent == "chroma-originals" ? " · archived original" : "")
+                    self.titleLabel.toolTip=self.current; self.window.representedURL=sourceURL
+                    self.exportButton.title="Export Again"; self.nextButton.title="Next Video"
+                    self.closing=false
                     if let warning=result["warning"] as? String { self.status.stringValue=warning }
-                    else { self.status.stringValue="Saved "+(result["output"] as? String ?? "")+" · Original archived." }
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result["output"] as! String)])
-                    self.current=nil
-                    if !self.queue.isEmpty { self.next() }
+                    else { self.status.stringValue="Saved "+(self.exportOutput ?? "")+". Adjust settings and Export Again to replace this WebM." }
+                    self.changed(nil)
                 }
             } catch { DispatchQueue.main.async { self.endExport(); self.status.stringValue=self.closing ? "Cancelled. Original preserved." : error.localizedDescription; self.closing=false; self.changed(nil) } }
         }

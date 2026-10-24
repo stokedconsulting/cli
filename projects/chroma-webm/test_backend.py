@@ -74,5 +74,82 @@ class Integration(unittest.TestCase):
         with self.assertRaises(ValueError): b.export(self.source,{"color":"';touch foo"})
         self.assertEqual(self.source.read_bytes(),self.original)
 
+
+    def test_reexport_uses_archive_and_replaces_tracked_output(self):
+        occupied=self.source.with_suffix(".webm"); occupied.write_bytes(b"unrelated output")
+        archive_dir=self.root/"chroma-originals"; archive_dir.mkdir()
+        (archive_dir/self.source.name).write_bytes(b"unrelated original")
+        first=b.export(self.source,{})
+        archived=pathlib.Path(first["source"]); output=pathlib.Path(first["output"])
+        old_output=output.read_bytes(); original_stat=archived.stat()
+        before=set(self.root.glob("*.webm"))
+        preview=b.preview(archived,{},.25,self.root/"archived-preview")
+        self.assertTrue(pathlib.Path(preview["keyed"]).is_file())
+        second=b.export(archived,{"similarity":.22},replace_output=output)
+        self.assertEqual(second["source"],first["source"])
+        self.assertEqual(second["output"],first["output"])
+        self.assertEqual(archived.read_bytes(),self.original)
+        self.assertEqual(archived.stat().st_ino,original_stat.st_ino)
+        self.assertNotEqual(output.read_bytes(),old_output)
+        self.assertEqual(set(self.root.glob("*.webm")),before)
+        self.assertEqual(occupied.read_bytes(),b"unrelated output")
+        self.assertEqual((archive_dir/self.source.name).read_bytes(),b"unrelated original")
+        self.assertFalse((archive_dir/"chroma-originals").exists())
+        self.assertEqual(b.probe(output)["codec"],"vp9")
+        self.assertLess(self.alpha(output)[0],10)
+
+    def test_reopened_archived_source_does_not_move_again(self):
+        first=b.export(self.source,{})
+        archived=pathlib.Path(first["source"])
+        output=pathlib.Path(first["output"]); previous=output.read_bytes()
+        second=b.export(archived,{"similarity":.22})
+        self.assertEqual(second["source"],first["source"])
+        self.assertEqual(pathlib.Path(second["output"]).parent,self.root.resolve())
+        self.assertNotEqual(second["output"],first["output"])
+        self.assertEqual(archived.read_bytes(),self.original)
+        self.assertEqual(output.read_bytes(),previous)
+        self.assertFalse((archived.parent/"chroma-originals").exists())
+
+    def test_failed_replacement_keeps_previous_output(self):
+        first=b.export(self.source,{})
+        archived=pathlib.Path(first["source"]); output=pathlib.Path(first["output"])
+        previous=output.read_bytes()
+        with mock.patch.object(b,"filters",return_value="not_a_real_filter"):
+            with self.assertRaises(RuntimeError):
+                b.export(archived,{},replace_output=output)
+        self.assertEqual(output.read_bytes(),previous)
+        self.assertEqual(archived.read_bytes(),self.original)
+        self.assertFalse(list(self.root.rglob(".chroma-*")))
+
+    def test_replacement_cannot_overwrite_source(self):
+        with self.assertRaises(ValueError):
+            b.export(self.source,{},replace_output=self.source)
+        alias=self.root/"alias.webm"; os.link(self.source,alias)
+        with self.assertRaises(ValueError):
+            b.export(self.source,{},replace_output=alias)
+        self.assertEqual(self.source.read_bytes(),self.original)
+
+    def test_cancelled_replacement_keeps_archive_and_output(self):
+        first=b.export(self.source,{})
+        output=pathlib.Path(first["output"]); previous=output.read_bytes()
+        archived=pathlib.Path(first["source"]).parent/"long.mp4"
+        b.ff(["-f","lavfi","-i","color=c=orange:s=1024x1024:r=30:d=8,drawbox=x=200:y=200:w=600:h=600:color=blue:t=fill","-c:v","libx264","-preset","ultrafast","-y",str(archived)])
+        digest=hashlib.sha256(archived.read_bytes()).digest()
+        p=subprocess.Popen([sys.executable,str(pathlib.Path(b.__file__)),"export",str(archived),"--replace-output",str(output)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        try:
+            deadline=time.monotonic()+20
+            while time.monotonic()<deadline and not list(self.root.glob(".chroma-*")) and p.poll() is None:
+                time.sleep(.05)
+            self.assertIsNone(p.poll(),"replacement finished before cancellation")
+            time.sleep(.15)
+            p.terminate(); p.communicate(timeout=20)
+            self.assertNotEqual(p.returncode,0)
+            self.assertEqual(hashlib.sha256(archived.read_bytes()).digest(),digest)
+            self.assertEqual(output.read_bytes(),previous)
+            self.assertFalse(list(self.root.rglob(".chroma-*")))
+            self.assertFalse((archived.parent/"chroma-originals").exists())
+        finally:
+            if p.poll() is None: p.kill(); p.communicate()
+
 if __name__=="__main__": unittest.main(verbosity=2)
 

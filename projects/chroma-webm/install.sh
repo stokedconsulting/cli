@@ -9,7 +9,9 @@ command -v ffmpeg >/dev/null
 command -v ffprobe >/dev/null
 mkdir -p "$INSTALL_DIR" "$APP/Contents/MacOS" "$APP/Contents/Resources" "$SERVICE/Contents"
 if [ "$SOURCE_DIR" != "$INSTALL_DIR" ]; then
-  cp "$SOURCE_DIR/backend.py" "$SOURCE_DIR/ChromaWebM.swift" "$SOURCE_DIR/test_backend.py" "$SOURCE_DIR/test_sampling.py" "$SOURCE_DIR/install.sh" "$SOURCE_DIR/workflow-template.wflow" "$SOURCE_DIR/README.md" "$INSTALL_DIR/"
+  cp "$SOURCE_DIR/backend.py" "$SOURCE_DIR/ChromaWebM.swift" "$SOURCE_DIR/test_backend.py" "$SOURCE_DIR/test_sampling.py" "$SOURCE_DIR/test_editor.py" "$SOURCE_DIR/install.sh" "$SOURCE_DIR/workflow-template.wflow" "$SOURCE_DIR/README.md" "$INSTALL_DIR/"
+  mkdir -p "$INSTALL_DIR/browser"
+  cp "$SOURCE_DIR/browser/prepare.py" "$INSTALL_DIR/browser/"
 fi
 swiftc -O "$SOURCE_DIR/ChromaWebM.swift" -o "$APP/Contents/MacOS/ChromaWebM" -framework Cocoa
 cp "$SOURCE_DIR/backend.py" "$APP/Contents/Resources/backend.py"
